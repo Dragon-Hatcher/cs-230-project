@@ -27,6 +27,13 @@ def load_data():
     stones = pd.read_csv("dataset/Stones.csv")
     ends = pd.read_csv("dataset/Ends.csv")
 
+    # Remove NaN stuff
+    stones = stones.drop("TimeOut", axis=1)
+    stones = stones.drop(stones[stones["Task"] == -1].index)
+
+    assert(np.isnan(stones.to_numpy()).sum() == 0)
+    assert((stones["Task"] == 13).sum() == 0)
+
     ends["PowerPlay"] = ends["PowerPlay"].fillna(0)
     ends = ends.sort_values(by=["CompetitionID","SessionID","GameID","TeamID","EndID"])
 

@@ -95,5 +95,8 @@ def load_data():
     # ------------ Y Values ---------------------
     for name, val in SHOT_TYPES_DICT.items():
         training_data[f"ShotType_{name}"] = stones["Task"] == val
+    for i in range(5):
+        training_data[f"Quality_{i}"] = stones["Points"] == i
+    training_data["Quality"] = stones['Points'] / 4
 
     return training_data

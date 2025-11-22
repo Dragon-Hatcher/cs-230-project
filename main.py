@@ -122,13 +122,15 @@ class_weights = class_counts.sum() / (len(class_counts) * class_counts)
 class_weight_dict = {i: w for i, w in enumerate(class_weights)}
 
 model = tf.keras.Sequential([
-    tf.keras.layers.Dense(50, activation='relu', input_shape=(train_data_X.shape[1],)),
+    tf.keras.layers.Dense(100, activation='relu', input_shape=(train_data_X.shape[1],)),
+    tf.keras.layers.Dense(80, activation='relu'),
+    tf.keras.layers.Dense(50, activation='relu'),
     tf.keras.layers.Dense(30, activation='relu'),
     tf.keras.layers.Dense(len(OUTPUT_COLS), activation='softmax')
 ])
 
 model.compile(optimizer='adam',
-              loss='binary_crossentropy',
+              loss='categorical_crossentropy',
               metrics=['accuracy'])
 
 history = model.fit(
@@ -137,6 +139,15 @@ history = model.fit(
     validation_data=tf_dev_dataset,
     # class_weight=class_weight_dict
 )
+
+from matplotlib import pyplot as plt
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
 
 print(pd.DataFrame(dev_data_Y[0:10,:]))
 p = model.predict(dev_data_X[0:10,:])

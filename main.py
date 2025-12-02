@@ -121,7 +121,7 @@ class_weights = class_counts.sum() / (len(class_counts) * class_counts)
 class_weight_dict = {i: w for i, w in enumerate(class_weights)}
 
 def make_hyperparams():
-    layers = [int(10 ** (1 + random.random())) for _ in range(random.randint(1,5))]
+    layers = [int(10 ** (1 + random.random() * 2)) for _ in range(random.randint(1,2))]
 
     return {
         "layers": layers,
@@ -166,25 +166,54 @@ def make_model(hyperparams):
     )
 
     best_dev_accuracy = max(history.history['val_accuracy'])
-    print("Trained")
+    print(f"Trained => {best_dev_accuracy}")
 
     return history, best_dev_accuracy, hyperparams
 
-models = [make_model(make_hyperparams()) for _ in range(10)]
-models = sorted(models, key=lambda x: -x[1])
-
-history, accuracy, hypers = models[0]
-print(f"Best model: {hypers} Had accuracy: {accuracy}")
-
 from matplotlib import pyplot as plt
-plt.plot(history.history['accuracy'])
-plt.plot(history.history['val_accuracy'])
+
+BEST_LR = 0.03
+
+x = []
+y = []
+for mb in range(0, 14):
+    for _ in range(2):
+        new_history, new_accuracy, new_hypers = make_model({
+            "layers": [100, 80, 50, 30],
+            "learning_rate": BEST_LR,
+            "minibatch_size": 2 ** mb,
+        })
+        x.append( mb)
+        y.append(new_accuracy)
+
+# plt.plot(x)
+# plt.plot(y)
+print(x, y)
+plt.scatter(x, y)
 plt.title('model accuracy')
 plt.ylabel('accuracy')
-plt.xlabel('epoch')
+plt.xlabel('log minibatch size')
 plt.legend(['train', 'val'], loc='upper left')
 plt.show()
 
-print(pd.DataFrame(dev_data_Y[0:10,:]))
-p = model.predict(dev_data_X[0:10,:])
-print(pd.DataFrame(p))
+# history = accuracy = hypers = None
+# while True:
+#     new_history, new_accuracy, new_hypers = make_model(make_hyperparams())
+#     if accuracy is None or new_accuracy > accuracy:
+#         history = new_history
+#         accuracy = new_accuracy
+#         hypers = new_hypers
+
+#         print(f"!! New best model: {hypers} Has accuracy: {accuracy}")
+
+        # plt.plot(history.history['accuracy'])
+        # plt.plot(history.history['val_accuracy'])
+        # plt.title('model accuracy')
+        # plt.ylabel('accuracy')
+        # plt.xlabel('epoch')
+        # plt.legend(['train', 'val'], loc='upper left')
+        # plt.show(block=False)
+
+# print(pd.DataFrame(dev_data_Y[0:10,:]))
+# p = model.predict(dev_data_X[0:10,:])
+# print(pd.DataFrame(p))

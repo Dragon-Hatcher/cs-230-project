@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
+import random
 
 # def make_assignment():
 #     f = random.random()
@@ -114,31 +115,66 @@ train_data_Y = train_dataset[OUTPUT_COLS].to_numpy().astype('float32')
 dev_data_X = dev_dataset[INPUT_COLS].to_numpy().astype('float32')
 dev_data_Y = dev_dataset[OUTPUT_COLS].to_numpy().astype('float32')
 
-tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_data_X, train_data_Y)).batch(1024)
-tf_dev_dataset = tf.data.Dataset.from_tensor_slices((dev_data_X, dev_data_Y)).batch(1024)
 
 class_counts = np.array([train_dataset[col].sum() for col in OUTPUT_COLS])
 class_weights = class_counts.sum() / (len(class_counts) * class_counts)
 class_weight_dict = {i: w for i, w in enumerate(class_weights)}
 
-model = tf.keras.Sequential([
-    tf.keras.layers.Dense(100, activation='relu', input_shape=(train_data_X.shape[1],)),
-    tf.keras.layers.Dense(80, activation='relu'),
-    tf.keras.layers.Dense(50, activation='relu'),
-    tf.keras.layers.Dense(30, activation='relu'),
-    tf.keras.layers.Dense(len(OUTPUT_COLS), activation='softmax')
-])
+def make_hyperparams():
+    layers = [int(10 ** (1 + random.random())) for _ in range(random.randint(1,5))]
 
-model.compile(optimizer='adam',
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
+    return {
+        "layers": layers,
+        "learning_rate": 10 ** (random.random() * -8),
+        "minibatch_size": 2 ** random.randint(0, 14),
+    }
 
-history = model.fit(
-    tf_train_dataset,
-    epochs=1000,
-    validation_data=tf_dev_dataset,
-    # class_weight=class_weight_dict
-)
+def make_model(hyperparams):
+    # First hidden layer takes from the input
+    layers = [tf.keras.layers.Dense(hyperparams["layers"][0], activation='relu', input_shape=(train_data_X.shape[1],))]
+    
+    # Rest of the hidden layers
+    for layer in hyperparams["layers"][1:]:
+        layers.append(tf.keras.layers.Dense(layer, activation='relu'))
+
+    # Softmax output layer
+    layers.append(tf.keras.layers.Dense(len(OUTPUT_COLS), activation='softmax'))
+
+    model = tf.keras.Sequential(layers)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hyperparams["learning_rate"]),
+                loss='categorical_crossentropy',
+                metrics=['accuracy'])
+
+    tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_data_X, train_data_Y)).batch(1024)
+    tf_dev_dataset = tf.data.Dataset.from_tensor_slices((dev_data_X, dev_data_Y)).batch(1024)
+
+    print(f"Trying {hyperparams}")
+    early_stop = tf.keras.callbacks.EarlyStopping(
+        monitor='val_accuracy',
+        patience=50,
+        mode='max',
+        restore_best_weights = True,
+    )
+
+    history = model.fit(
+        tf_train_dataset,
+        epochs=1000,
+        validation_data=tf_dev_dataset,
+        callbacks=[early_stop],
+        verbose=0,
+        # class_weight=class_weight_dict
+    )
+
+    best_dev_accuracy = max(history.history['val_accuracy'])
+    print("Trained")
+
+    return history, best_dev_accuracy, hyperparams
+
+models = [make_model(make_hyperparams()) for _ in range(10)]
+models = sorted(models, key=lambda x: -x[1])
+
+history, accuracy, hypers = models[0]
+print(f"Best model: {hypers} Had accuracy: {accuracy}")
 
 from matplotlib import pyplot as plt
 plt.plot(history.history['accuracy'])

@@ -3,8 +3,7 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from tensorflow.keras import regularizers
-from tensorflow.keras.layers import BatchNormalization
+import random
 
 # def make_assignment():
 #     f = random.random()
@@ -22,50 +21,50 @@ from tensorflow.keras.layers import BatchNormalization
 # all_games.to_csv("training_groups.csv")
 
 dataset = load_data()
-training_groups = pd.read_csv(r"C:\Users\gmjam\Downloads\training_groups.csv")
+training_groups = pd.read_csv("training_groups.csv")
 dataset = pd.merge(dataset, training_groups, how="left", on=["CompetitionID","SessionID","GameID"])
 
 INPUT_COLS = [
     'EndID', 'ShotID', 'IsHammer',
-    'ps_stone_shooter_1_x',
-    'ps_stone_opponent_1_x',
+    'ps_stone_shooter_1_x', 
+    'ps_stone_opponent_1_x', 
     'ps_stone_shooter_1_y',
-    'ps_stone_opponent_1_y',
+    'ps_stone_opponent_1_y', 
     'ps_stone_shooter_1_thrown',
-    'ps_stone_opponent_1_thrown',
+    'ps_stone_opponent_1_thrown', 
     'ps_stone_shooter_2_x',
-    'ps_stone_opponent_2_x',
+    'ps_stone_opponent_2_x', 
     'ps_stone_shooter_2_y',
-    'ps_stone_opponent_2_y',
+    'ps_stone_opponent_2_y', 
     'ps_stone_shooter_2_thrown',
-    'ps_stone_opponent_2_thrown',
+    'ps_stone_opponent_2_thrown', 
     'ps_stone_shooter_3_x',
-    'ps_stone_opponent_3_x',
+    'ps_stone_opponent_3_x', 
     'ps_stone_shooter_3_y',
-    'ps_stone_opponent_3_y',
+    'ps_stone_opponent_3_y', 
     'ps_stone_shooter_3_thrown',
-    'ps_stone_opponent_3_thrown',
+    'ps_stone_opponent_3_thrown', 
     'ps_stone_shooter_4_x',
     'ps_stone_opponent_4_x',
     'ps_stone_shooter_4_y',
     'ps_stone_opponent_4_y',
     'ps_stone_shooter_4_thrown',
-    'ps_stone_opponent_4_thrown',
+    'ps_stone_opponent_4_thrown', 
     'ps_stone_shooter_5_x',
-    'ps_stone_opponent_5_x',
+    'ps_stone_opponent_5_x', 
     'ps_stone_shooter_5_y',
-    'ps_stone_opponent_5_y',
+    'ps_stone_opponent_5_y', 
     'ps_stone_shooter_5_thrown',
-    'ps_stone_opponent_5_thrown',
+    'ps_stone_opponent_5_thrown', 
     'ps_stone_shooter_6_x',
-    'ps_stone_opponent_6_x',
+    'ps_stone_opponent_6_x', 
     'ps_stone_shooter_6_y',
-    'ps_stone_opponent_6_y',
+    'ps_stone_opponent_6_y', 
     'ps_stone_shooter_6_thrown',
-    'ps_stone_opponent_6_thrown',
-    'ShooterScore',
+    'ps_stone_opponent_6_thrown', 
+    'ShooterScore', 
     'ShooterPowerPlay',
-    'OpponentScore',
+    'OpponentScore', 
     'OpponentPowerPlay',
 ]
 OUTPUT_COLS = [
@@ -76,10 +75,12 @@ OUTPUT_COLS = [
     'ShotType_Double Take-out', 'ShotType_Promotion Take-out',
     'ShotType_through'
 ]
-
+# OUTPUT_COLS = [
+#     'Quality'
+# ]
 
 NORMALIZE_COLS = [
-    'ps_stone_shooter_1_x',
+    'ps_stone_shooter_1_x', 
     'ps_stone_opponent_1_x', 'ps_stone_shooter_1_y',
     'ps_stone_opponent_1_y', 'ps_stone_shooter_2_x',
     'ps_stone_opponent_2_x', 'ps_stone_shooter_2_y',
@@ -94,97 +95,19 @@ NORMALIZE_COLS = [
     'ps_stone_opponent_6_y',
 ]
 
+scalar = StandardScaler()
+
+for col in NORMALIZE_COLS:
+    dataset[col] = scalar.fit_transform(dataset[[col]])
+    # dataset[col] = dataset[[col]] / 4095
+
 train_dataset = dataset[dataset["Group"] == "TRAIN"]
 dev_dataset = dataset[dataset["Group"] == "DEV"]
 
-# ---------- AUGMENTATION: JITTERING ----------
-
-def flip_x_coordinates(df, x_cols, max_x=4095):
-
-    df_flipped = df.copy()
-    for col in x_cols:
-        # Only flip non-special values if needed (e.g., not 0 or max_x)
-        mask = (df_flipped[col] != 0) & (df_flipped[col] != max_x)
-        df_flipped.loc[mask, col] = 1500 - df_flipped.loc[mask, col]
-    return df_flipped
-
-def permute_stones_vectorized(df, stone_count=6):
-    """
-    Vectorized permutation of stones 1..stone_count for both shooter and opponent.
-    Returns a new DataFrame with permuted stone positions.
-    """
-    df_aug = df.copy()
-    n_rows = len(df_aug)
-
-    # Shooter stones
-    shooter_cols_x = [f'ps_stone_shooter_{i}_x' for i in range(1, stone_count+1)]
-    shooter_cols_y = [f'ps_stone_shooter_{i}_y' for i in range(1, stone_count+1)]
-    shooter_cols_thrown = [f'ps_stone_shooter_{i}_thrown' for i in range(1, stone_count+1)]
-
-    # Opponent stones
-    opponent_cols_x = [f'ps_stone_opponent_{i}_x' for i in range(1, stone_count+1)]
-    opponent_cols_y = [f'ps_stone_opponent_{i}_y' for i in range(1, stone_count+1)]
-    opponent_cols_thrown = [f'ps_stone_opponent_{i}_thrown' for i in range(1, stone_count+1)]
-
-    # Convert to numpy arrays
-    shooter_x = df_aug[shooter_cols_x].to_numpy()
-    shooter_y = df_aug[shooter_cols_y].to_numpy()
-    shooter_thrown = df_aug[shooter_cols_thrown].to_numpy()
-
-    opponent_x = df_aug[opponent_cols_x].to_numpy()
-    opponent_y = df_aug[opponent_cols_y].to_numpy()
-    opponent_thrown = df_aug[opponent_cols_thrown].to_numpy()
-
-    # Generate random permutations for each row
-    shooter_perms = np.array([np.random.permutation(stone_count) for _ in range(n_rows)])
-    opponent_perms = np.array([np.random.permutation(stone_count) for _ in range(n_rows)])
-
-    # Apply permutations
-    for i, col in enumerate(shooter_cols_x):
-        df_aug[col] = shooter_x[np.arange(n_rows), shooter_perms[:, i]]
-    for i, col in enumerate(shooter_cols_y):
-        df_aug[col] = shooter_y[np.arange(n_rows), shooter_perms[:, i]]
-    for i, col in enumerate(shooter_cols_thrown):
-        df_aug[col] = shooter_thrown[np.arange(n_rows), shooter_perms[:, i]]
-
-    for i, col in enumerate(opponent_cols_x):
-        df_aug[col] = opponent_x[np.arange(n_rows), opponent_perms[:, i]]
-    for i, col in enumerate(opponent_cols_y):
-        df_aug[col] = opponent_y[np.arange(n_rows), opponent_perms[:, i]]
-    for i, col in enumerate(opponent_cols_thrown):
-        df_aug[col] = opponent_thrown[np.arange(n_rows), opponent_perms[:, i]]
-
-    return df_aug
-
-
-JITTER_COLS = [c for c in INPUT_COLS if c.endswith("_x") or c.endswith("_y")]
-
-jittered = train_dataset.copy()
-
-
-JITTER_AMOUNT = 5
-
-for col in JITTER_COLS:
-    # Only add jitter where the value is not a special case (0 or 4095)
-    mask = (jittered[col] != 0) & (jittered[col] != 4095)
-    jittered.loc[mask, col] += np.random.uniform(-JITTER_AMOUNT, JITTER_AMOUNT, size=mask.sum())
-
-augmented_train = permute_stones_vectorized(train_dataset)
-flipped = flip_x_coordinates(train_dataset, [c for c in INPUT_COLS if c.endswith("_x")])
-
-# Concatenate with original training data
-#train_dataset = pd.concat([train_dataset, flipped], ignore_index=True)
-#train_dataset = pd.concat([train_dataset, jittered], ignore_index=True)
-#train_dataset = pd.concat([train_dataset, augmented_train], ignore_index=True)
-print(train_dataset.shape)
-
-scalar = StandardScaler()
-for col in NORMALIZE_COLS:
-    train_dataset[col] = scalar.fit_transform(train_dataset[[col]])
-    dev_dataset[col] = scalar.transform(dev_dataset[[col]])
-
-
-
+# print()
+# print(len(dev_dataset))
+# for col in OUTPUT_COLS:
+#     print(col, ":", dev_dataset[col].sum())
 
 train_data_X = train_dataset[INPUT_COLS].to_numpy().astype('float32')
 train_data_Y = train_dataset[OUTPUT_COLS].to_numpy().astype('float32')
@@ -192,62 +115,105 @@ train_data_Y = train_dataset[OUTPUT_COLS].to_numpy().astype('float32')
 dev_data_X = dev_dataset[INPUT_COLS].to_numpy().astype('float32')
 dev_data_Y = dev_dataset[OUTPUT_COLS].to_numpy().astype('float32')
 
-tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_data_X, train_data_Y)).batch(1024)
-tf_dev_dataset = tf.data.Dataset.from_tensor_slices((dev_data_X, dev_data_Y)).batch(1024)
 
 class_counts = np.array([train_dataset[col].sum() for col in OUTPUT_COLS])
 class_weights = class_counts.sum() / (len(class_counts) * class_counts)
 class_weight_dict = {i: w for i, w in enumerate(class_weights)}
 
+def make_hyperparams():
+    layers = [int(10 ** (1 + random.random() * 2)) for _ in range(random.randint(1,2))]
 
-# Amount of L2 regularization
-L2_DECAY = 0.00
-DROPOUT_RATE = 0.2
-model = tf.keras.Sequential([
-    tf.keras.Input(shape=(train_data_X.shape[1],)),
-    tf.keras.layers.Dense(100, activation='relu',
-                          kernel_regularizer=regularizers.l2(L2_DECAY)),
-    BatchNormalization(),  # <-- Normalize before activation
-    tf.keras.layers.Activation('relu'),
-    tf.keras.layers.Dropout(DROPOUT_RATE),
-    tf.keras.layers.Dense(80, activation='relu',
-                          kernel_regularizer=regularizers.l2(L2_DECAY)),
-    BatchNormalization(),  # <-- Normalize before activation
-    tf.keras.layers.Activation('relu'),
-    tf.keras.layers.Dropout(DROPOUT_RATE),
-    tf.keras.layers.Dense(50, activation='relu',
-                          kernel_regularizer=regularizers.l2(L2_DECAY)),
-    BatchNormalization(),  # <-- Normalize before activation
-    tf.keras.layers.Activation('relu'),
-    tf.keras.layers.Dropout(DROPOUT_RATE),
-    tf.keras.layers.Dense(30, activation='relu',
-                          kernel_regularizer=regularizers.l2(L2_DECAY)),
-    BatchNormalization(),  # <-- Normalize before activation
-    tf.keras.layers.Activation('relu'),
-    tf.keras.layers.Dropout(DROPOUT_RATE),
-    tf.keras.layers.Dense(len(OUTPUT_COLS), activation='softmax')
-])
+    return {
+        "layers": layers,
+        "learning_rate": 10 ** (random.random() * -8),
+        "minibatch_size": 2 ** random.randint(0, 14),
+    }
 
-model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.01),
-              loss='categorical_crossentropy',
-              metrics=['accuracy'])
+def make_model(hyperparams):
+    # First hidden layer takes from the input
+    layers = [tf.keras.layers.Dense(hyperparams["layers"][0], activation='relu', input_shape=(train_data_X.shape[1],))]
+    
+    # Rest of the hidden layers
+    for layer in hyperparams["layers"][1:]:
+        layers.append(tf.keras.layers.Dense(layer, activation='relu'))
 
-history = model.fit(
-    tf_train_dataset,
-    epochs=2000,
-    validation_data=tf_dev_dataset,
-    # class_weight=class_weight_dict
-)
+    # Softmax output layer
+    layers.append(tf.keras.layers.Dense(len(OUTPUT_COLS), activation='softmax'))
+
+    model = tf.keras.Sequential(layers)
+    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=hyperparams["learning_rate"]),
+                loss='categorical_crossentropy',
+                metrics=['accuracy'])
+
+    tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_data_X, train_data_Y)).batch(1024)
+    tf_dev_dataset = tf.data.Dataset.from_tensor_slices((dev_data_X, dev_data_Y)).batch(1024)
+
+    print(f"Trying {hyperparams}")
+    early_stop = tf.keras.callbacks.EarlyStopping(
+        monitor='val_accuracy',
+        patience=50,
+        mode='max',
+        restore_best_weights = True,
+    )
+
+    history = model.fit(
+        tf_train_dataset,
+        epochs=1000,
+        validation_data=tf_dev_dataset,
+        callbacks=[early_stop],
+        verbose=0,
+        # class_weight=class_weight_dict
+    )
+
+    best_dev_accuracy = max(history.history['val_accuracy'])
+    print(f"Trained => {best_dev_accuracy}")
+
+    return history, best_dev_accuracy, hyperparams
 
 from matplotlib import pyplot as plt
-plt.plot(history.history['accuracy'])
-plt.plot(history.history['val_accuracy'])
+
+BEST_LR = 0.03
+
+x = []
+y = []
+for mb in range(0, 14):
+    for _ in range(2):
+        new_history, new_accuracy, new_hypers = make_model({
+            "layers": [100, 80, 50, 30],
+            "learning_rate": BEST_LR,
+            "minibatch_size": 2 ** mb,
+        })
+        x.append( mb)
+        y.append(new_accuracy)
+
+# plt.plot(x)
+# plt.plot(y)
+print(x, y)
+plt.scatter(x, y)
 plt.title('model accuracy')
 plt.ylabel('accuracy')
-plt.xlabel('epoch')
+plt.xlabel('log minibatch size')
 plt.legend(['train', 'val'], loc='upper left')
 plt.show()
 
-print(pd.DataFrame(dev_data_Y[0:10,:]))
-p = model.predict(dev_data_X[0:10,:])
-print(pd.DataFrame(p))
+# history = accuracy = hypers = None
+# while True:
+#     new_history, new_accuracy, new_hypers = make_model(make_hyperparams())
+#     if accuracy is None or new_accuracy > accuracy:
+#         history = new_history
+#         accuracy = new_accuracy
+#         hypers = new_hypers
+
+#         print(f"!! New best model: {hypers} Has accuracy: {accuracy}")
+
+        # plt.plot(history.history['accuracy'])
+        # plt.plot(history.history['val_accuracy'])
+        # plt.title('model accuracy')
+        # plt.ylabel('accuracy')
+        # plt.xlabel('epoch')
+        # plt.legend(['train', 'val'], loc='upper left')
+        # plt.show(block=False)
+
+# print(pd.DataFrame(dev_data_Y[0:10,:]))
+# p = model.predict(dev_data_X[0:10,:])
+# print(pd.DataFrame(p))

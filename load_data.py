@@ -99,4 +99,4 @@ def load_data():
         training_data[f"Quality_{i}"] = stones["Points"] == i
     training_data["Quality"] = stones['Points'] / 4
 
-    return training_data
+    return training_data.dropna()

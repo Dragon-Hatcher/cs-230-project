@@ -104,10 +104,10 @@ for col in NORMALIZE_COLS:
 train_dataset = dataset[dataset["Group"] == "TRAIN"]
 dev_dataset = dataset[dataset["Group"] == "DEV"]
 
-# print()
-# print(len(dev_dataset))
-# for col in OUTPUT_COLS:
-#     print(col, ":", dev_dataset[col].sum())
+print()
+print(len(train_dataset))
+for col in OUTPUT_COLS:
+    print(col, ":", train_dataset[col].sum())
 
 train_data_X = train_dataset[INPUT_COLS].to_numpy().astype('float32')
 train_data_Y = train_dataset[OUTPUT_COLS].to_numpy().astype('float32')
@@ -121,7 +121,7 @@ class_weights = class_counts.sum() / (len(class_counts) * class_counts)
 class_weight_dict = {i: w for i, w in enumerate(class_weights)}
 
 def make_hyperparams():
-    layers = [int(10 ** (1 + random.random() * 2)) for _ in range(random.randint(1,2))]
+    layers = [int(10 ** (1 + random.random())) for _ in range(random.randint(1,2))]
 
     return {
         "layers": layers,
@@ -129,7 +129,7 @@ def make_hyperparams():
         "minibatch_size": 2 ** random.randint(0, 14),
     }
 
-def make_model(hyperparams):
+def make_model(hyperparams, percent):
     # First hidden layer takes from the input
     layers = [tf.keras.layers.Dense(hyperparams["layers"][0], activation='relu', input_shape=(train_data_X.shape[1],))]
     
@@ -145,7 +145,12 @@ def make_model(hyperparams):
                 loss='categorical_crossentropy',
                 metrics=['accuracy'])
 
-    tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_data_X, train_data_Y)).batch(1024)
+    subset_size = int(len(train_data_X) * percent)
+    indices = np.random.choice(len(train_data_X), subset_size, replace=False)
+    train_X = train_data_X[indices]
+    train_Y = train_data_Y[indices]
+
+    tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_X, train_Y)).batch(1024)
     tf_dev_dataset = tf.data.Dataset.from_tensor_slices((dev_data_X, dev_data_Y)).batch(1024)
 
     print(f"Trying {hyperparams}")

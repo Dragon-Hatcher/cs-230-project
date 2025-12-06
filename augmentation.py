@@ -22,7 +22,7 @@ from tensorflow.keras.layers import BatchNormalization
 # all_games.to_csv("training_groups.csv")
 
 dataset = load_data()
-training_groups = pd.read_csv(r"C:\Users\gmjam\Downloads\training_groups.csv")
+training_groups = pd.read_csv("training_groups.csv")
 dataset = pd.merge(dataset, training_groups, how="left", on=["CompetitionID","SessionID","GameID"])
 
 INPUT_COLS = [
@@ -96,6 +96,7 @@ NORMALIZE_COLS = [
 
 train_dataset = dataset[dataset["Group"] == "TRAIN"]
 dev_dataset = dataset[dataset["Group"] == "DEV"]
+test_dataset = dataset[dataset["Group"] == "TEST"]
 
 # ---------- AUGMENTATION: JITTERING ----------
 
@@ -182,8 +183,7 @@ scalar = StandardScaler()
 for col in NORMALIZE_COLS:
     train_dataset[col] = scalar.fit_transform(train_dataset[[col]])
     dev_dataset[col] = scalar.transform(dev_dataset[[col]])
-
-
+    test_dataset[col] = scalar.transform(test_dataset[[col]])
 
 
 train_data_X = train_dataset[INPUT_COLS].to_numpy().astype('float32')
@@ -191,6 +191,9 @@ train_data_Y = train_dataset[OUTPUT_COLS].to_numpy().astype('float32')
 
 dev_data_X = dev_dataset[INPUT_COLS].to_numpy().astype('float32')
 dev_data_Y = dev_dataset[OUTPUT_COLS].to_numpy().astype('float32')
+
+test_data_X = test_dataset[INPUT_COLS].to_numpy().astype('float32')
+test_data_Y = test_dataset[OUTPUT_COLS].to_numpy().astype('float32')
 
 tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_data_X, train_data_Y)).batch(1024)
 tf_dev_dataset = tf.data.Dataset.from_tensor_slices((dev_data_X, dev_data_Y)).batch(1024)
@@ -234,7 +237,7 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.01),
 
 history = model.fit(
     tf_train_dataset,
-    epochs=2000,
+    epochs=150,
     validation_data=tf_dev_dataset,
     # class_weight=class_weight_dict
 )
@@ -248,6 +251,175 @@ plt.xlabel('epoch')
 plt.legend(['train', 'val'], loc='upper left')
 plt.show()
 
-print(pd.DataFrame(dev_data_Y[0:10,:]))
-p = model.predict(dev_data_X[0:10,:])
-print(pd.DataFrame(p))
+p = model.predict(test_data_X)
+print(p)
+
+# print(pd.DataFrame(dev_data_Y[0:10,:]))
+# p = model.predict(dev_data_X[0:10,:])
+# print(pd.DataFrame(p))
+
+
+from sklearn.metrics import confusion_matrix, classification_report
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# ---------------------------------------
+# Convert predictions → class indices
+# ---------------------------------------
+y_pred = np.argmax(p, axis=1)
+y_true = np.argmax(test_data_Y, axis=1)
+
+# ---------------------------------------
+# Raw confusion matrix
+# ---------------------------------------
+cm = confusion_matrix(y_true, y_pred)
+print("Raw Confusion Matrix:")
+print(cm)
+
+# ---------------------------------------
+# Normalized confusion matrix (row-wise)
+# ---------------------------------------
+cm_normalized = confusion_matrix(y_true, y_pred, normalize='true')
+print("\nNormalized Confusion Matrix (rows sum to 1):")
+print(cm_normalized)
+
+# ---------------------------------------
+# Classification report (precision, recall, f1)
+# ---------------------------------------
+print("\nClassification Report:")
+print(classification_report(y_true, y_pred, target_names=OUTPUT_COLS, digits=4))
+
+
+# ---------------------------------------
+# Plot Raw Confusion Matrix
+# ---------------------------------------
+plt.figure(figsize=(14, 12))
+sns.heatmap(cm,
+            annot=True,
+            fmt="d",
+            cmap="Blues",
+            xticklabels=OUTPUT_COLS,
+            yticklabels=OUTPUT_COLS)
+plt.xlabel("Predicted")
+plt.ylabel("True")
+plt.title("Confusion Matrix (Raw Counts)")
+plt.tight_layout()
+plt.show()
+
+
+# ---------------------------------------
+# Plot Normalized Confusion Matrix
+# ---------------------------------------
+plt.figure(figsize=(14, 12))
+sns.heatmap(cm_normalized,
+            annot=True,
+            fmt=".2f",
+            cmap="Blues",
+            xticklabels=OUTPUT_COLS,
+            yticklabels=OUTPUT_COLS)
+plt.xlabel("Predicted")
+plt.ylabel("True")
+plt.title("Confusion Matrix (Normalized)")
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Define groups of similar shot types
+GROUPS = {
+    "Draw Family": [
+        "ShotType_Draw",
+        "ShotType_Front",
+        "ShotType_Guard",
+        "ShotType_Freeze"
+    ],
+    "Tap / Raise": [
+        "ShotType_Raise / Tap-back",
+        "ShotType_Promotion Take-out"
+    ],
+    "Takeout Family": [
+        "ShotType_Take-out",
+        "ShotType_Double Take-out",
+        "ShotType_Clearing"
+    ],
+    "Touch / Wick": [
+        "ShotType_Wick / Soft Peeling",
+        "ShotType_Hit and Roll"
+    ],
+    "Through": [
+        "ShotType_through"
+    ]
+}
+# Map each OUTPUT_COL to its group name
+label_to_group = {}
+
+for group_name, members in GROUPS.items():
+    for m in members:
+        label_to_group[m] = group_name
+
+# Verify all labels accounted for
+missing = [lbl for lbl in OUTPUT_COLS if lbl not in label_to_group]
+if missing:
+    print("WARNING: These classes were not assigned to a group:", missing)
+
+# Convert one-hot → label index
+y_pred = np.argmax(p, axis=1)
+y_true = np.argmax(test_data_Y, axis=1)
+
+# Convert index → label string
+idx_to_label = {i: lbl for i, lbl in enumerate(OUTPUT_COLS)}
+
+true_group = [label_to_group[idx_to_label[i]] for i in y_true]
+pred_group = [label_to_group[idx_to_label[i]] for i in y_pred]
+
+# List of unique groups in order
+group_names = list(GROUPS.keys())
+
+
+from sklearn.metrics import confusion_matrix
+import numpy as np
+
+cm_grouped = confusion_matrix(true_group, pred_group, labels=group_names)
+cm_grouped_normalized = confusion_matrix(true_group, pred_group, labels=group_names, normalize='true')
+
+print("Grouped Confusion Matrix (Raw):")
+print(cm_grouped)
+
+print("\nGrouped Confusion Matrix (Normalized):")
+print(cm_grouped_normalized)
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Raw grouped CM
+plt.figure(figsize=(10, 8))
+sns.heatmap(cm_grouped, annot=True, fmt="d", cmap="Blues",
+            xticklabels=group_names, yticklabels=group_names)
+plt.xlabel("Predicted Group")
+plt.ylabel("True Group")
+plt.title("Grouped Confusion Matrix (Raw Counts)")
+plt.tight_layout()
+plt.show()
+
+# Normalized grouped CM
+plt.figure(figsize=(10, 8))
+sns.heatmap(cm_grouped_normalized, annot=True, fmt=".2f", cmap="Blues",
+            xticklabels=group_names, yticklabels=group_names)
+plt.xlabel("Predicted Group")
+plt.ylabel("True Group")
+plt.title("Grouped Confusion Matrix (Normalized)")
+plt.tight_layout()
+plt.show()

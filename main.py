@@ -5,10 +5,8 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-from tensorflow.keras import regularizers
-from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report
-import matplotlib.pyplot as plt
+from matplotlib import pyplot as plt
 import seaborn as sns
 import random
 
@@ -92,9 +90,9 @@ dataset = load_data()
 training_groups = pd.read_csv("training_groups.csv")
 dataset = pd.merge(dataset, training_groups, how="left", on=["CompetitionID","SessionID","GameID"])
 
-train_dataset = dataset[dataset["Group"] == "TRAIN"]
-dev_dataset = dataset[dataset["Group"] == "DEV"]
-test_dataset = dataset[dataset["Group"] == "TEST"]
+train_dataset = dataset[dataset["Group"] == "TRAIN"].copy()
+dev_dataset = dataset[dataset["Group"] == "DEV"].copy()
+test_dataset = dataset[dataset["Group"] == "TEST"].copy()
 
 # Perform data augmentation.
 train_dataset = augment_data(
@@ -155,7 +153,7 @@ class_counts = np.array([train_dataset[col].sum() for col in OUTPUT_COLS])
 class_weights = class_counts.sum() / (len(class_counts) * class_counts)
 class_weight_dict = {i: w for i, w in enumerate(class_weights)}
 
-def train_model(hyperparams):
+def train_model(hyperparams, silent=False):
     # Input layer
     layers = [tf.keras.Input(shape=(train_data_X.shape[1],))]
     
@@ -164,7 +162,7 @@ def train_model(hyperparams):
         layers.append(tf.keras.layers.Dense(
             layer, 
             activation='relu', 
-            kernel_regularizer=regularizers.l2(hyperparams["l2_decay"])
+            kernel_regularizer=tf.keras.regularizers.l2(hyperparams["l2_decay"])
         )),
         layers.append(tf.keras.layers.Dropout(hyperparams["dropout_rate"]))
 
@@ -193,6 +191,7 @@ def train_model(hyperparams):
         epochs=1000,
         validation_data=tf_dev_dataset,
         callbacks=[early_stop],
+        verbose=0 if silent else None,
         class_weight=class_weight_dict if hyperparams["use_class_counts"] else None,
     )
 
@@ -256,6 +255,9 @@ def evaluate_model(model):
     plt.tight_layout()
     plt.show()
 
+# Get tensorflow warning messages out of the way
+print("\n\n\n\n")
+
 # Train and evaluate one instance of the model
 hyperparams = get_standard_hyperparameters()
 model, history, _ = train_model(hyperparams)
@@ -267,7 +269,7 @@ evaluate_model(model)
 # best_accuracy = 0
 # for _ in range(100):
 #     hyperparams = get_random_hyperparameters()
-#     model, history, best_dev_accuracy = train_model(hyperparams)
+#     model, history, best_dev_accuracy = train_model(hyperparams, silent=True)
 #     if best_dev_accuracy > best_accuracy:
 #         best_accuracy = best_dev_accuracy
 #         best_model = model

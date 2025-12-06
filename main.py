@@ -99,7 +99,8 @@ train_dataset = augment_data(
     train_dataset,
     input_cols=INPUT_COLS,
     augmentations=[
-        # No augmentations right now.
+        # TA_HELP: we can enable the different form of data augmentation by
+        # uncommenting the lines below.
         # "flip",
         # "jitter",
         # "permute"
@@ -127,25 +128,17 @@ test_data_Y = test_dataset[OUTPUT_COLS].to_numpy().astype('float32')
 tf_train_dataset = tf.data.Dataset.from_tensor_slices((train_data_X, train_data_Y)).batch(1024)
 tf_dev_dataset = tf.data.Dataset.from_tensor_slices((dev_data_X, dev_data_Y)).batch(1024)
 
-def get_random_hyperparameters():
-    layers = [int(10 ** (1 + random.random())) for _ in range(random.randint(1,2))]
-
-    return {
-        "layers": layers,
-        "learning_rate": 10 ** (random.random() * -8),
-        "minibatch_size": 2 ** random.randint(0, 14),
-        "l2_decay": 0.0,
-        "dropout_rate": 0.2,
-        "use_class_counts": False,
-    }
-
 def get_standard_hyperparameters():
     return {
         "layers": [100, 90, 50, 30],
         "learning_rate": 0.01,
         "minibatch_size": 1024,
+        # TA_HELP: We can modify the regularization used by changing the 
+        # parameters below.
         "l2_decay": 0.0,
         "dropout_rate": 0.2,
+        # We can enable the class count aware loss function by setting this
+        # to true.
         "use_class_counts": False,
     }
 
@@ -191,7 +184,7 @@ def train_model(hyperparams, silent=False):
         epochs=1000,
         validation_data=tf_dev_dataset,
         callbacks=[early_stop],
-        verbose=0 if silent else None,
+        verbose=0 if silent else "auto",
         class_weight=class_weight_dict if hyperparams["use_class_counts"] else None,
     )
 
@@ -264,7 +257,20 @@ model, history, _ = train_model(hyperparams)
 plot_model_history(history)
 evaluate_model(model)
 
-# If we wanted to perform hyperparameter search, it would look like this:
+# TA_HELP: When we performed hyperparameter search, it looked like this:
+
+def get_random_hyperparameters():
+    layers = [int(10 ** (1 + random.random())) for _ in range(random.randint(1,2))]
+
+    return {
+        "layers": layers,
+        "learning_rate": 10 ** (random.random() * -8),
+        "minibatch_size": 2 ** random.randint(0, 14),
+        "l2_decay": 0.0,
+        "dropout_rate": 0.2,
+        "use_class_counts": False,
+    }
+
 # best_model = None
 # best_accuracy = 0
 # for _ in range(100):
